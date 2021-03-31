@@ -69,6 +69,7 @@ class MainWindow(QMainWindow):
         m1.addAction('Open video').triggered.connect(self.open_video)
         m1 = self.menuBar().addMenu('Filter')
         m1.addAction('Clear').triggered.connect(self.clear_filter)
+        m1.addAction('Connected components').triggered.connect(self.connected_components)
         m2 = m1.addMenu('Blur')
         a = m2.addAction('Gaussian')
         a.triggered.connect(self.gaussian_blur)
@@ -80,6 +81,14 @@ class MainWindow(QMainWindow):
     def clear_filter(self):
         if self.videoThread is not None:
             self.videoThread.clear_processing_steps()
+
+    def connected_components(self):
+        self.image = cv.cvtColor(self.image, cv.COLOR_BGR2GRAY)
+        cv.threshold(self.image, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU, self.image)
+        cv.dilate(self.image, np.ones((5,5), np.uint8), self.image)
+        n, self.image = cv.connectedComponents(self.image, self.image, 4, cv.CV_16U)
+        self.image *= 5120
+        self.update_image(QImage.Format_Grayscale16)
 
     def gaussian_blur(self):
         if self.videoThread is None:
@@ -93,7 +102,7 @@ class MainWindow(QMainWindow):
         if self.videoThread is None:
             fgmask = self.fgbg.apply(self.image)
             self.image = cv.bitwise_and(self.image, self.image, mask=fgmask)
-            self.update_image()
+            self.update_image(cv.Format_RGB32)
         else:
             self.videoThread.push_processing_step(self.video_background_removal)
 
@@ -131,7 +140,7 @@ class MainWindow(QMainWindow):
         self.image = image
         self.update_image()
 
-    def update_image(self):
+    def update_image(self, format = QImage.Format_RGB888):
         im = QImage(self.image.data, self.image.shape[1],
-                    self.image.shape[0], QImage.Format_RGB888).rgbSwapped()
+                    self.image.shape[0], format).rgbSwapped()
         self.centralWidget().setPixmap(QPixmap.fromImage(im))
