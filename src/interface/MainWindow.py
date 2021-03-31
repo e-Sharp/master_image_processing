@@ -18,12 +18,13 @@ def current_milli_time():
 class VideoThread(QThread):
     change_pixmap_signal = pyqtSignal(np.ndarray)
 
-    def __init__(self, cap: cv.VideoCapture, processing: Callable = None):
+    def __init__(self, path: str, processing: Callable = None):
         super().__init__()
-        self.cap = cap
+        self.filename = path
+        self.cap = cv.VideoCapture(path)
         self.stp = False
         self.processing_steps = []
-        self.timeByFrame = 1./cap.get(cv.CAP_PROP_FPS)
+        self.timeByFrame = 1./self.cap.get(cv.CAP_PROP_FPS)
         self.psa = False
 
     def clear_processing_steps(self):
@@ -37,6 +38,9 @@ class VideoThread(QThread):
 
     def pause(self):
         self.psa = not self.psa
+
+    def restart(self):
+        self.cap = cv.VideoCapture(self.filename)
 
     def run(self):
         while True:
@@ -72,9 +76,12 @@ class MainWindow(QMainWindow):
     def contextMenuEvent(self, event):
         contextMenu = QMenu(self) 
         pause = contextMenu.addAction("pause")
+        restart = contextMenu.addAction("restart")
         action = contextMenu.exec_(self.mapToGlobal(event.pos()))
         if action == pause and self.videoThread is not None:
             self.videoThread.pause()
+        if action == restart and self.videoThread is not None:
+            self.videoThread.restart()
 
     def createCentralWidget(self):
         self.setCentralWidget(QLabel())
@@ -143,10 +150,9 @@ class MainWindow(QMainWindow):
     def open_video(self):
         fn, format = QFileDialog.getOpenFileName(
             self, 'Open Video', '.', 'Videos (*.avi *.mkv *.mp4)')
-        cap = cv.VideoCapture(fn)
         if self.videoThread is not None:
             self.videoThread.stop()
-        self.videoThread = VideoThread(cap)
+        self.videoThread = VideoThread(fn)
         self.videoThread.change_pixmap_signal.connect(self.update_video)
         self.videoThread.start()
 
