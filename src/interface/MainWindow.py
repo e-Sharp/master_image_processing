@@ -8,6 +8,7 @@ from PyQt5.QtWidgets import *
 from typing import Callable
 
 from src.filter.unsharp_masking import *
+from src.filter.background_removal import BackgroundRemoval
 
 
 def current_milli_time():
@@ -23,6 +24,7 @@ class VideoThread(QThread):
         self.stp = False
         self.processing_steps = []
         self.timeByFrame = 1./cap.get(cv.CAP_PROP_FPS)
+        self.psa = False
 
     def clear_processing_steps(self):
         self.processing_steps = []
@@ -33,20 +35,26 @@ class VideoThread(QThread):
     def stop(self):
         self.stp = True
 
+    def pause(self):
+        self.psa = not self.psa
+
     def run(self):
         while True:
             if self.stp:
                 break
-            start = current_milli_time()
-            ret, cv_img = self.cap.read()
-            if ret:
-                for ps in self.processing_steps:
-                    cv_img = ps(cv_img)
-                self.change_pixmap_signal.emit(cv_img)
+            if self.psa:
+                time.sleep(0.1)
+            else:
+                start = current_milli_time()
+                ret, cv_img = self.cap.read()
+                if ret:
+                    for ps in self.processing_steps:
+                        cv_img = ps(cv_img)
+                    self.change_pixmap_signal.emit(cv_img)
 
-            elapsed = current_milli_time() - start
-            sl = max(0, self.timeByFrame - (elapsed/1000.))
-            time.sleep(sl)
+                elapsed = current_milli_time() - start
+                sl = max(0, self.timeByFrame - (elapsed/1000.))
+                time.sleep(sl)
         self.cap.release()
 
 
@@ -58,6 +66,15 @@ class MainWindow(QMainWindow):
 
         self.image = None
         self.videoThread = None
+        self.background = None
+
+    
+    def contextMenuEvent(self, event):
+        contextMenu = QMenu(self) 
+        pause = contextMenu.addAction("pause")
+        action = contextMenu.exec_(self.mapToGlobal(event.pos()))
+        if action == pause and self.videoThread is not None:
+            self.videoThread.pause()
 
     def createCentralWidget(self):
         self.setCentralWidget(QLabel())
@@ -67,6 +84,10 @@ class MainWindow(QMainWindow):
         a = m1.addAction('Open image')
         a.triggered.connect(self.open_image)
         m1.addAction('Open video').triggered.connect(self.open_video)
+        m1.addAction('Open image as reference').triggered.connect(
+            self.open_image_reference)
+        m1.addAction('Open video as reference').triggered.connect(
+            self.open_video_reference)
         m1 = self.menuBar().addMenu('Filter')
         m1.addAction('Clear').triggered.connect(self.clear_filter)
         m1.addAction('Connected components').triggered.connect(self.connected_components)
@@ -76,7 +97,10 @@ class MainWindow(QMainWindow):
         m2 = m1.addMenu('Sharpening')
         a = m2.addAction('Unsharp masking')
         a.triggered.connect(self.unsharp_masking)
-        m1.addAction('Background removal').triggered.connect(self.background_removal)
+        m1.addAction('Background removal 1').triggered.connect(
+            self.background_removal)
+        m1.addAction('Background removal 2').triggered.connect(
+            self.background_removal2)
 
     def clear_filter(self):
         if self.videoThread is not None:
@@ -99,12 +123,24 @@ class MainWindow(QMainWindow):
 
     def background_removal(self):
         self.fgbg = cv.createBackgroundSubtractorKNN()
-        if self.videoThread is None:
-            fgmask = self.fgbg.apply(self.image)
-            self.image = cv.bitwise_and(self.image, self.image, mask=fgmask)
-            self.update_image(cv.Format_RGB32)
+        if self.videoThread is not None:
+            self.videoThread.push_processing_step(
+                self.video_background_removal)
+
+    def background_removal2(self):
+        if self.background is not None:
+            bck = BackgroundRemoval(self.background)
+            if self.videoThread is None:
+                self.image = bck.background_removal(self.image)
+                self.update_image()
+            else:
+                self.videoThread.push_processing_step(bck.background_removal)
         else:
-            self.videoThread.push_processing_step(self.video_background_removal)
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Critical)
+            msg.setText("Must select a background as reference")
+            msg.exec_()
+
 
     def video_background_removal(self, img):
         fgmask = self.fgbg.apply(img)
@@ -128,6 +164,16 @@ class MainWindow(QMainWindow):
             self, 'Open File', '.', 'Images (*.png *.xpm *.jpg)')
         self.image = cv.imread(fn)
         self.update_image()
+
+    def open_image_reference(self):
+        fn, format = QFileDialog.getOpenFileName(
+            self, 'Open File', '.', 'Images (*.png *.xpm *.jpg)')
+        self.background = cv.imread(fn)
+
+    def open_video_reference(self):
+        fn, format = QFileDialog.getOpenFileName(
+            self, 'Open Video', '.', 'Videos (*.avi *.mkv *.mp4)')
+        x, self.background = cv.VideoCapture(fn).read()
 
     def unsharp_masking(self):
         if self.videoThread is None:
