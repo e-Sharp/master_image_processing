@@ -8,6 +8,10 @@ from PyQt5.QtWidgets import *
 from typing import Callable
 
 
+def current_milli_time():
+    return round(time.time() * 1000)
+
+
 class VideoThread(QThread):
     change_pixmap_signal = pyqtSignal(np.ndarray)
 
@@ -28,12 +32,16 @@ class VideoThread(QThread):
         while True:
             if self.stp:
                 break
+            start = current_milli_time()
             ret, cv_img = self.cap.read()
             if ret:
                 if self.processing is not None:
                     cv_img = self.processing(cv_img)
                 self.change_pixmap_signal.emit(cv_img)
-            time.sleep(self.timeByFrame)
+
+            elapsed = current_milli_time() - start
+            sl = max(0, self.timeByFrame - (elapsed/1000.))
+            time.sleep(sl)
         self.cap.release()
 
 
