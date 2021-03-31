@@ -7,6 +7,8 @@ from PyQt5.QtWidgets import *
 
 from typing import Callable
 
+from src.filter.unsharp_masking import *
+
 
 class VideoThread(QThread):
     change_pixmap_signal = pyqtSignal(np.ndarray)
@@ -62,11 +64,14 @@ class MainWindow(QMainWindow):
         m2 = m1.addMenu('Blur')
         a = m2.addAction('Gaussian')
         a.triggered.connect(self.gaussian_blur)
+        m2 = m1.addMenu('Sharpening')
+        a = m2.addAction('Unsharp masking')
+        a.triggered.connect(self.unsharp_masking)
         m1.addAction('Background removal').triggered.connect(self.background_removal)
 
     def clear_filter(self):
         if self.videoThread is not None:
-            self.videoThread.clear_processing_steps(None)
+            self.videoThread.clear_processing_steps()
 
     def gaussian_blur(self):
         if self.videoThread is None:
@@ -106,6 +111,13 @@ class MainWindow(QMainWindow):
             self, 'Open File', '.', 'Images (*.png *.xpm *.jpg)')
         self.image = cv.imread(fn)
         self.update_image()
+
+    def unsharp_masking(self):
+        if self.videoThread is None:
+            unsharp_masking(self.image)
+            self.update_image()
+        else:
+            self.videoThread.push_processing_step(unsharp_masking)
 
     def update_video(self, image: np.ndarray):
         self.image = image
