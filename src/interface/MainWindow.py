@@ -24,6 +24,7 @@ class VideoThread(QThread):
         self.stp = False
         self.processing_steps = []
         self.timeByFrame = 1./cap.get(cv.CAP_PROP_FPS)
+        self.psa = False
 
     def clear_processing_steps(self):
         self.processing_steps = []
@@ -34,20 +35,26 @@ class VideoThread(QThread):
     def stop(self):
         self.stp = True
 
+    def pause(self):
+        self.psa = not self.psa
+
     def run(self):
         while True:
             if self.stp:
                 break
-            start = current_milli_time()
-            ret, cv_img = self.cap.read()
-            if ret:
-                for ps in self.processing_steps:
-                    cv_img = ps(cv_img)
-                self.change_pixmap_signal.emit(cv_img)
+            if self.psa:
+                time.sleep(0.1)
+            else:
+                start = current_milli_time()
+                ret, cv_img = self.cap.read()
+                if ret:
+                    for ps in self.processing_steps:
+                        cv_img = ps(cv_img)
+                    self.change_pixmap_signal.emit(cv_img)
 
-            elapsed = current_milli_time() - start
-            sl = max(0, self.timeByFrame - (elapsed/1000.))
-            time.sleep(sl)
+                elapsed = current_milli_time() - start
+                sl = max(0, self.timeByFrame - (elapsed/1000.))
+                time.sleep(sl)
         self.cap.release()
 
 
@@ -60,6 +67,14 @@ class MainWindow(QMainWindow):
         self.image = None
         self.videoThread = None
         self.background = None
+
+    
+    def contextMenuEvent(self, event):
+        contextMenu = QMenu(self) 
+        pause = contextMenu.addAction("pause")
+        action = contextMenu.exec_(self.mapToGlobal(event.pos()))
+        if action == pause and self.videoThread is not None:
+            self.videoThread.pause()
 
     def createCentralWidget(self):
         self.setCentralWidget(QLabel())
