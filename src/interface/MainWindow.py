@@ -18,7 +18,7 @@ class VideoThread(QThread):
         self.processing = processing
         self.timeByFrame = 1./cap.get(cv.CAP_PROP_FPS)
 
-    def setProcessing(self, processing):
+    def setProcessing(self, processing: Callable):
         self.processing = processing
 
     def stop(self):
@@ -59,17 +59,31 @@ class MainWindow(QMainWindow):
         m2 = m1.addMenu('Blur')
         a = m2.addAction('Gaussian')
         a.triggered.connect(self.gaussian_blur)
+        m1.addAction('Background removal').triggered.connect(self.background_removal)
 
     def clear_filter(self):
         if self.videoThread is not None:
             self.videoThread.setProcessing(None)
 
     def gaussian_blur(self):
-        if VideoThread is None:
+        if self.videoThread is None:
             self.image = cv.GaussianBlur(self.image, (5, 5), 0, 0)
             self.update_image()
         else:
             self.videoThread.setProcessing(self.video_gaussian_blur)
+
+    def background_removal(self):
+        self.fgbg = cv.createBackgroundSubtractorKNN()
+        if self.videoThread is None:
+            fgmask = self.fgbg.apply(self.image)
+            self.image = cv.bitwise_and(self.image, self.image, mask=fgmask)
+            self.update_image()
+        else:
+            self.videoThread.setProcessing(self.video_background_removal)
+
+    def video_background_removal(self, img):
+        fgmask = self.fgbg.apply(img)
+        return cv.bitwise_and(img, img, mask=fgmask)
 
     def video_gaussian_blur(self, img: np.ndarray) -> np.ndarray:
         return cv.GaussianBlur(img, (5, 5), 0, 0)
@@ -90,7 +104,7 @@ class MainWindow(QMainWindow):
         self.image = cv.imread(fn)
         self.update_image()
 
-    def update_video(self, image):
+    def update_video(self, image: np.ndarray):
         self.image = image
         self.update_image()
 
