@@ -7,6 +7,8 @@ from PyQt5.QtWidgets import *
 
 from typing import Callable
 
+from src.filter.unsharp_masking import *
+
 
 def current_milli_time():
     return round(time.time() * 1000)
@@ -19,11 +21,14 @@ class VideoThread(QThread):
         super().__init__()
         self.cap = cap
         self.stp = False
-        self.processing = processing
+        self.processing_steps = []
         self.timeByFrame = 1./cap.get(cv.CAP_PROP_FPS)
 
-    def setProcessing(self, processing: Callable):
-        self.processing = processing
+    def clear_processing_steps(self):
+        self.processing_steps = []
+
+    def push_processing_step(self, ps: Callable):
+        self.processing_steps.append(ps)
 
     def stop(self):
         self.stp = True
@@ -35,8 +40,8 @@ class VideoThread(QThread):
             start = current_milli_time()
             ret, cv_img = self.cap.read()
             if ret:
-                if self.processing is not None:
-                    cv_img = self.processing(cv_img)
+                for ps in self.processing_steps:
+                    cv_img = ps(cv_img)
                 self.change_pixmap_signal.emit(cv_img)
 
             elapsed = current_milli_time() - start
@@ -67,18 +72,21 @@ class MainWindow(QMainWindow):
         m2 = m1.addMenu('Blur')
         a = m2.addAction('Gaussian')
         a.triggered.connect(self.gaussian_blur)
+        m2 = m1.addMenu('Sharpening')
+        a = m2.addAction('Unsharp masking')
+        a.triggered.connect(self.unsharp_masking)
         m1.addAction('Background removal').triggered.connect(self.background_removal)
 
     def clear_filter(self):
         if self.videoThread is not None:
-            self.videoThread.setProcessing(None)
+            self.videoThread.clear_processing_steps()
 
     def gaussian_blur(self):
         if self.videoThread is None:
             self.image = cv.GaussianBlur(self.image, (5, 5), 0, 0)
             self.update_image()
         else:
-            self.videoThread.setProcessing(self.video_gaussian_blur)
+            self.videoThread.push_processing_step(self.video_gaussian_blur)
 
     def background_removal(self):
         self.fgbg = cv.createBackgroundSubtractorKNN()
@@ -87,7 +95,7 @@ class MainWindow(QMainWindow):
             self.image = cv.bitwise_and(self.image, self.image, mask=fgmask)
             self.update_image()
         else:
-            self.videoThread.setProcessing(self.video_background_removal)
+            self.videoThread.push_processing_step(self.video_background_removal)
 
     def video_background_removal(self, img):
         fgmask = self.fgbg.apply(img)
@@ -111,6 +119,13 @@ class MainWindow(QMainWindow):
             self, 'Open File', '.', 'Images (*.png *.xpm *.jpg)')
         self.image = cv.imread(fn)
         self.update_image()
+
+    def unsharp_masking(self):
+        if self.videoThread is None:
+            unsharp_masking(self.image)
+            self.update_image()
+        else:
+            self.videoThread.push_processing_step(unsharp_masking)
 
     def update_video(self, image: np.ndarray):
         self.image = image
