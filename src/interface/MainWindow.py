@@ -1,7 +1,6 @@
 import cv2 as cv
 import numpy as np
 import time
-from PyQt5.QtCore import QThread, pyqtSignal
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 
@@ -9,57 +8,7 @@ from typing import Callable
 
 from src.filter.unsharp_masking import *
 from src.filter.background_removal import BackgroundRemoval
-
-
-def current_milli_time():
-    return round(time.time() * 1000)
-
-
-class VideoThread(QThread):
-    change_pixmap_signal = pyqtSignal(np.ndarray)
-
-    def __init__(self, path: str, processing: Callable = None):
-        super().__init__()
-        self.filename = path
-        self.cap = cv.VideoCapture(path)
-        self.stp = False
-        self.processing_steps = []
-        self.timeByFrame = 1./self.cap.get(cv.CAP_PROP_FPS)
-        self.psa = False
-
-    def clear_processing_steps(self):
-        self.processing_steps = []
-
-    def push_processing_step(self, ps: Callable):
-        self.processing_steps.append(ps)
-
-    def stop(self):
-        self.stp = True
-
-    def pause(self):
-        self.psa = not self.psa
-
-    def restart(self):
-        self.cap = cv.VideoCapture(self.filename)
-
-    def run(self):
-        while True:
-            if self.stp:
-                break
-            if self.psa:
-                time.sleep(0.1)
-            else:
-                start = current_milli_time()
-                ret, cv_img = self.cap.read()
-                if ret:
-                    for ps in self.processing_steps:
-                        cv_img = ps(cv_img)
-                    self.change_pixmap_signal.emit(cv_img)
-
-                elapsed = current_milli_time() - start
-                sl = max(0, self.timeByFrame - (elapsed/1000.))
-                time.sleep(sl)
-        self.cap.release()
+from src.interface.VideoThread import VideoThread
 
 
 class MainWindow(QMainWindow):
@@ -72,9 +21,8 @@ class MainWindow(QMainWindow):
         self.videoThread = None
         self.background = None
 
-    
     def contextMenuEvent(self, event):
-        contextMenu = QMenu(self) 
+        contextMenu = QMenu(self)
         pause = contextMenu.addAction("pause")
         restart = contextMenu.addAction("restart")
         action = contextMenu.exec_(self.mapToGlobal(event.pos()))
@@ -104,9 +52,11 @@ class MainWindow(QMainWindow):
         m2 = m1.addMenu('Sharpening')
         a = m2.addAction('Unsharp masking')
         a.triggered.connect(self.unsharp_masking)
-        m1.addAction('Background removal 1').triggered.connect(
+
+        m3 = m1.addMenu('Background removal')
+        m3.addAction('KNN').triggered.connect(
             self.background_removal)
-        m1.addAction('Background removal 2').triggered.connect(
+        m3.addAction('Perso').triggered.connect(
             self.background_removal2)
 
     def clear_filter(self):
@@ -192,7 +142,7 @@ class MainWindow(QMainWindow):
         self.image = image
         self.update_image()
 
-    def update_image(self, format = QImage.Format_RGB888):
+    def update_image(self, format=QImage.Format_RGB888):
         im = QImage(self.image.data, self.image.shape[1],
                     self.image.shape[0], format).rgbSwapped()
         self.centralWidget().setPixmap(QPixmap.fromImage(im))
