@@ -109,17 +109,19 @@ class MainWindow(QMainWindow):
     def open_video(self):
         fn, format = QFileDialog.getOpenFileName(
             self, 'Open Video', '.', 'Videos (*.avi *.mkv *.mp4)')
-        if self.videoThread is not None:
-            self.videoThread.stop()
-        self.videoThread = VideoThread(fn)
-        self.videoThread.change_pixmap_signal.connect(self.update_video)
-        self.videoThread.start()
+        if fn is not None and fn != "":
+            if self.videoThread is not None:
+                self.videoThread.stop()
+            self.videoThread = VideoThread(fn)
+            self.videoThread.change_pixmap_signal.connect(self.update_video)
+            self.videoThread.start()
 
     def open_image(self):
         fn, format = QFileDialog.getOpenFileName(
             self, 'Open File', '.', 'Images (*.png *.xpm *.jpg)')
-        self.image = cv.imread(fn)
-        self.update_image()
+        if fn is not None and fn != "":
+            self.image = cv.imread(fn)
+            self.update_image()
 
     def open_image_reference(self):
         fn, format = QFileDialog.getOpenFileName(
