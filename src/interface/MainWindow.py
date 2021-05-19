@@ -3,12 +3,14 @@ import numpy as np
 import time
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
+from PyQt5.QtCore import Qt
 
 from typing import Callable
 
 from src.filter.unsharp_masking import *
 from src.filter.background_removal import BackgroundRemoval
 from src.interface.VideoThread import VideoThread
+from src.utils.groupType import GroupType
 
 
 class MainWindow(QMainWindow):
@@ -25,14 +27,23 @@ class MainWindow(QMainWindow):
         contextMenu = QMenu(self)
         pause = contextMenu.addAction("pause")
         restart = contextMenu.addAction("restart")
+        stopPlacing = contextMenu.addAction("Stop Placing")
+        clearSeeds = contextMenu.addAction("Clear Seeds")
         action = contextMenu.exec_(self.mapToGlobal(event.pos()))
         if action == pause and self.videoThread is not None:
             self.videoThread.pause()
         if action == restart and self.videoThread is not None:
             self.videoThread.restart()
+        if action == stopPlacing:
+            QApplication.restoreOverrideCursor()
+            self.placing = False
+        if action == clearSeeds:
+            self.mapSeeds.clear()
+
 
     def createCentralWidget(self):
         self.setCentralWidget(QLabel())
+        self.centralWidget().mousePressEvent = self.getPos
 
     def createMenuBar(self):
         m1 = self.menuBar().addMenu('File')
@@ -58,6 +69,34 @@ class MainWindow(QMainWindow):
             self.background_removal)
         m3.addAction('Perso').triggered.connect(
             self.background_removal2)
+
+        m10 = self.menuBar().addMenu('Body Parts')
+        m11 = m10.addMenu('Place seeds')
+        m11.addAction('Left arm').triggered.connect(lambda: self.placeSeeds(GroupType.LEFT_ARM))
+        m11.addAction('Right arm').triggered.connect(lambda: self.placeSeeds(GroupType.RIGHT_ARM))
+        m11.addAction('Head').triggered.connect(lambda: self.placeSeeds(GroupType.HEAD))
+        m11.addAction('Torso').triggered.connect(lambda: self.placeSeeds(GroupType.TORSO))
+        m11.addAction('Left leg').triggered.connect(lambda: self.placeSeeds(GroupType.LEFT_LEG))
+        m11.addAction('Right leg').triggered.connect(lambda: self.placeSeeds(GroupType.RIGHT_LEG))
+        self.placing = False
+        self.currentGroup = None
+        self.mapSeeds = {}
+
+    def placeSeeds(self, idGroup):
+        print("Place seeds : ", idGroup)
+        self.placing = True
+        self.currentGroup = idGroup
+        QApplication.setOverrideCursor(Qt.CrossCursor)
+
+    def getPos(self, event):
+        if event.buttons() & Qt.LeftButton:
+            if self.placing:
+                x = event.pos().x()
+                y = event.pos().y()
+                if self.currentGroup not in self.mapSeeds:
+                    self.mapSeeds[self.currentGroup] = []
+                self.mapSeeds[self.currentGroup].append((x,y))
+                print(self.mapSeeds)
 
     def clear_filter(self):
         if self.videoThread is not None:
