@@ -49,7 +49,10 @@ class VideoThread(QThread):
                 ret, cv_img = self.cap.read()
                 if ret:
                     for ps in self.processing_steps:
-                        cv_img = ps(cv_img)
+                        try:
+                            cv_img = ps(cv_img)
+                        except:
+                            print("Error on ", ps)
                     self.change_pixmap_signal.emit(cv_img)
 
                 elapsed = current_milli_time() - start
