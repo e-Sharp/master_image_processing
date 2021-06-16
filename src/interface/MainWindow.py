@@ -1,3 +1,4 @@
+import copy
 import cv2 as cv
 import numpy as np
 import time
@@ -16,6 +17,11 @@ from src.utils.groupType import GroupType
 class MainWindow(QMainWindow):
     def __init__(self, parent=None):
         super().__init__(parent)
+
+        self.references = {}
+        self.buffers = {}
+        self.selectedBuffer = 'src'
+        
         self.createCentralWidget()
         self.createMenuBar()
 
@@ -54,9 +60,9 @@ class MainWindow(QMainWindow):
             self.open_image_reference)
         m1.addAction('Open video as reference').triggered.connect(
             self.open_video_reference)
+        self.references['viewMenu'] = self.menuBar().addMenu('View')
         m1 = self.menuBar().addMenu('Filter')
         m1.addAction('Clear').triggered.connect(self.clear_filter)
-        m1.addAction('Connected components').triggered.connect(self.connected_components)
         m2 = m1.addMenu('Blur')
         a = m2.addAction('Gaussian')
         a.triggered.connect(self.gaussian_blur)
@@ -74,6 +80,8 @@ class MainWindow(QMainWindow):
             self.background_removal)
         m3.addAction('Perso').triggered.connect(
             self.background_removal2)
+        m1 = self.menuBar().addMenu('Region growing')
+        m1.addAction('Begin').triggered.connect(self.beginRegionGrowing)
 
         m10 = self.menuBar().addMenu('Body Parts')
         m11 = m10.addMenu('Place seeds')
@@ -192,8 +200,12 @@ class MainWindow(QMainWindow):
         fn, format = QFileDialog.getOpenFileName(
             self, 'Open File', '.', 'Images (*.png *.xpm *.jpg)')
         if fn is not None and fn != "":
-            self.image = cv.imread(fn)
+            self.buffers['src'] = {
+                'data': cv.imread(fn),
+                'format': QImage.Format_RGB888}
+            self.image = self.buffers['src']['data']
             self.update_image()
+        self.updateViewMenu()
 
     def open_image_reference(self):
         fn, format = QFileDialog.getOpenFileName(
@@ -213,10 +225,42 @@ class MainWindow(QMainWindow):
             self.videoThread.push_processing_step(unsharp_masking)
 
     def update_video(self, image: np.ndarray):
-        self.image = image
+        self.buffers['src'] = {
+            'data'  : image,
+            'format': QImage.Format_RGB888}
+        self.selectBuffer('src')
+
+    def updateViewMenu(self):
+        m = self.references['viewMenu']
+        m.clear()
+        for (id, buffer) in self.buffers.items():
+            def make(id):
+                def action():
+                    self.selectBuffer(id)
+                return action
+            m.addAction(id).triggered.connect(make(id))
+
+    def selectBuffer(self, id):
+        self.image = self.buffers[id]['data']
+        self.selectedBuffer = id
         self.update_image()
 
     def update_image(self, format=QImage.Format_RGB888):
         im = QImage(self.image.data, self.image.shape[1],
-                    self.image.shape[0], format).rgbSwapped()
+                    self.image.shape[0], self.buffers[self.selectedBuffer]['format']).rgbSwapped()
         self.centralWidget().setPixmap(QPixmap.fromImage(im))
+
+    def beginRegionGrowing(self):
+        (w, h, c) = self.buffers['src']['data'].shape
+        self.buffers['boundaries'] = {
+            'data': np.zeros((w, h), np.uint8),
+            'format': QImage.Format_Mono}
+        self.buffers['regions'] = {
+            'data': np.zeros((w, h), np.uint8),
+            'format': QImage.Format_Mono}
+        self.buffers['visited'] = {
+            'data': np.zeros((w, h), np.bool_),
+            'format': QImage.Format_Mono}
+        self.updateViewMenu()
+        
+            
