@@ -4,12 +4,14 @@ import numpy as np
 import time
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
+from PyQt5.QtCore import Qt
 
 from typing import Callable
 
 from src.filter.unsharp_masking import *
 from src.filter.background_removal import BackgroundRemoval
 from src.interface.VideoThread import VideoThread
+from src.utils.groupType import GroupType
 
 
 class MainWindow(QMainWindow):
@@ -31,14 +33,23 @@ class MainWindow(QMainWindow):
         contextMenu = QMenu(self)
         pause = contextMenu.addAction("pause")
         restart = contextMenu.addAction("restart")
+        stopPlacing = contextMenu.addAction("Stop Placing")
+        clearSeeds = contextMenu.addAction("Clear Seeds")
         action = contextMenu.exec_(self.mapToGlobal(event.pos()))
         if action == pause and self.videoThread is not None:
             self.videoThread.pause()
         if action == restart and self.videoThread is not None:
             self.videoThread.restart()
+        if action == stopPlacing:
+            QApplication.restoreOverrideCursor()
+            self.placing = False
+        if action == clearSeeds:
+            self.mapSeeds.clear()
+
 
     def createCentralWidget(self):
         self.setCentralWidget(QLabel())
+        self.centralWidget().mousePressEvent = self.getPos
 
     def createMenuBar(self):
         m1 = self.menuBar().addMenu('File')
@@ -59,6 +70,12 @@ class MainWindow(QMainWindow):
         m2 = m1.addMenu('Sharpening')
         a = m2.addAction('Unsharp masking')
         a.triggered.connect(self.unsharp_masking)
+        m2 = m1.addMenu('Noise')
+        a = m2.addAction('Add_noise')
+        a.triggered.connect(self.add_noise)
+        a = m2.addAction('Denoise')
+        a.triggered.connect(self.denoising)
+
         m3 = m1.addMenu('Background removal')
         m3.addAction('KNN').triggered.connect(
             self.background_removal)
@@ -67,6 +84,34 @@ class MainWindow(QMainWindow):
         m1 = self.menuBar().addMenu('Region growing')
         m1.addAction('Begin').triggered.connect(self.beginRegionGrowing)
 
+        m10 = self.menuBar().addMenu('Body Parts')
+        m11 = m10.addMenu('Place seeds')
+        m11.addAction('Left arm').triggered.connect(lambda: self.placeSeeds(GroupType.LEFT_ARM))
+        m11.addAction('Right arm').triggered.connect(lambda: self.placeSeeds(GroupType.RIGHT_ARM))
+        m11.addAction('Head').triggered.connect(lambda: self.placeSeeds(GroupType.HEAD))
+        m11.addAction('Torso').triggered.connect(lambda: self.placeSeeds(GroupType.TORSO))
+        m11.addAction('Left leg').triggered.connect(lambda: self.placeSeeds(GroupType.LEFT_LEG))
+        m11.addAction('Right leg').triggered.connect(lambda: self.placeSeeds(GroupType.RIGHT_LEG))
+        self.placing = False
+        self.currentGroup = None
+        self.mapSeeds = {}
+
+    def placeSeeds(self, idGroup):
+        print("Place seeds : ", idGroup)
+        self.placing = True
+        self.currentGroup = idGroup
+        QApplication.setOverrideCursor(Qt.CrossCursor)
+
+    def getPos(self, event):
+        if event.buttons() & Qt.LeftButton:
+            if self.placing:
+                x = event.pos().x()
+                y = event.pos().y()
+                if self.currentGroup not in self.mapSeeds:
+                    self.mapSeeds[self.currentGroup] = []
+                self.mapSeeds[self.currentGroup].append((x,y))
+                print(self.mapSeeds)
+
     def clear_filter(self):
         if self.videoThread is not None:
             self.videoThread.clear_processing_steps()
@@ -74,7 +119,7 @@ class MainWindow(QMainWindow):
     def connected_components(self):
         self.image = cv.cvtColor(self.image, cv.COLOR_BGR2GRAY)
         cv.threshold(self.image, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU, self.image)
-        cv.dilate(self.image, np.ones((5,5), np.uint8), self.image)
+        cv.dilate(self.image, np.ones((5, 5), np.uint8), self.image)
         n, self.image = cv.connectedComponents(self.image, self.image, 4, cv.CV_16U)
         self.image *= 5120
         self.update_image(QImage.Format_Grayscale16)
@@ -106,10 +151,38 @@ class MainWindow(QMainWindow):
             msg.setText("Must select a background as reference")
             msg.exec_()
 
-
     def video_background_removal(self, img):
         fgmask = self.fgbg.apply(img)
         return cv.bitwise_and(img, img, mask=fgmask)
+
+    def denoising(self):
+        self.image = cv.fastNlMeansDenoising(self.image, None, 17, 21, 7)
+        self.update_image()
+
+    def add_noise(self):
+        #speckle noise
+        gauss = np.random.normal(0, 0.5, self.image.size)
+        gauss = gauss.reshape(self.image.shape[0], self.image.shape[1], self.image.shape[2]).astype('uint8')
+        self.image = cv.add(self.image, gauss)
+
+        '''gauss = np.random.normal(0, 0.5, self.image.size)
+        gauss = gauss.reshape(self.image.shape[0], self.image.shape[1], self.image.shape[2]).astype('uint8')
+        self.image = cv.add(self.image, gauss)'''
+        '''
+        for _ in range(20):
+            img1 = self.image.copy()
+            cv.randn(img1, (1, 1, 1), (2, 2, 2))
+            self.image += img1
+        # For averaging create an empty array, then add images to this array.
+        img_avg = np.zeros((self.image.shape[0], self.image.shape[1], self.image.shape[2]), np.float32)
+        for im in self.image:
+            img_avg = img_avg + im / 20
+            print(im)
+        # Round the float values. Always specify the dtype
+        #self.image = np.array(np.round(img_avg), dtype=np.uint8)
+        print(self.image)
+        '''
+        self.update_image()
 
     def video_gaussian_blur(self, img: np.ndarray) -> np.ndarray:
         return cv.GaussianBlur(img, (5, 5), 0, 0)
