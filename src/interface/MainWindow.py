@@ -10,6 +10,7 @@ from typing import Callable
 
 from src.filter.unsharp_masking import *
 from src.filter.background_removal import BackgroundRemoval
+from src.interface.RegionGrowing import RegionGrowing
 from src.interface.VideoThread import VideoThread
 from src.utils.groupType import GroupType
 
@@ -80,8 +81,7 @@ class MainWindow(QMainWindow):
             self.background_removal)
         m3.addAction('Perso').triggered.connect(
             self.background_removal2)
-        m1 = self.menuBar().addMenu('Region growing')
-        m1.addAction('Begin').triggered.connect(self.beginRegionGrowing)
+        m1 = self.menuBar().addAction('Region Growing').triggered.connect(self.regionGrowing)
 
         m10 = self.menuBar().addMenu('Body Parts')
         m11 = m10.addMenu('Place seeds')
@@ -250,17 +250,23 @@ class MainWindow(QMainWindow):
                     self.image.shape[0], self.buffers[self.selectedBuffer]['format']).rgbSwapped()
         self.centralWidget().setPixmap(QPixmap.fromImage(im))
 
-    def beginRegionGrowing(self):
-        (w, h, c) = self.buffers['src']['data'].shape
-        self.buffers['boundaries'] = {
-            'data': np.zeros((w, h), np.uint8),
-            'format': QImage.Format_Mono}
-        self.buffers['regions'] = {
-            'data': np.zeros((w, h), np.uint8),
-            'format': QImage.Format_Mono}
-        self.buffers['visited'] = {
-            'data': np.zeros((w, h), np.bool_),
-            'format': QImage.Format_Mono}
-        self.updateViewMenu()
+    def regionGrowing(self):
+        rg = RegionGrowing(
+            self.buffers['src']['data'],
+            np.ones(self.buffers['src']['data'].shape[:2]),
+            self.mapSeeds)
+        rg.saturate()
+        print(rg.result())
+        
+        # self.buffers['boundaries'] = {
+        #     'data': np.zeros((w, h), np.uint8),
+        #     'format': QImage.Format_Mono}
+        # self.buffers['regions'] = {
+        #     'data': np.zeros((w, h), np.uint8),
+        #     'format': QImage.Format_Mono}
+        # self.buffers['visited'] = {
+        #     'data': np.zeros((w, h), np.bool_),
+        #     'format': QImage.Format_Mono}
+        # self.updateViewMenu()
         
             
