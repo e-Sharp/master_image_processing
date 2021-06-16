@@ -63,7 +63,6 @@ class MainWindow(QMainWindow):
         self.references['viewMenu'] = self.menuBar().addMenu('View')
         m1 = self.menuBar().addMenu('Filter')
         m1.addAction('Clear').triggered.connect(self.clear_filter)
-        m1.addAction('Connected components').triggered.connect(self.connected_components)
         m2 = m1.addMenu('Blur')
         a = m2.addAction('Gaussian')
         a.triggered.connect(self.gaussian_blur)
@@ -226,8 +225,10 @@ class MainWindow(QMainWindow):
             self.videoThread.push_processing_step(unsharp_masking)
 
     def update_video(self, image: np.ndarray):
-        self.image = image
-        self.update_image()
+        self.buffers['src'] = {
+            'data'  : image,
+            'format': QImage.Format_RGB888}
+        self.selectBuffer('src')
 
     def updateViewMenu(self):
         m = self.references['viewMenu']
