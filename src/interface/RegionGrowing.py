@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import colorsys
 
 class RegionGrowing:
     def __init__(self, image, mask, seeds):
@@ -55,3 +56,18 @@ class RegionGrowing:
 
     def virgin_neighbors(self, position):
         return [n for n in self.unmasked_neighbors(position) if self.regions[n] == 0]
+
+    def image_representation(self):
+        def hsv2rgb(h, s, v):
+            return tuple(round(i * 255.) for i in colorsys.hsv_to_rgb(h, s, v))
+
+        maxRegion = 6
+        div = 1. / maxRegion
+
+        resImage = np.zeros(self.image.shape)
+
+        for x in range(len(self.regions)):
+            for y in range(len(self.regions[0])):
+                resImage[x][y] = hsv2rgb(div*self.regions[x][y], 1, 1) if self.regions[x][y] else (0,0,0)
+
+        return resImage
