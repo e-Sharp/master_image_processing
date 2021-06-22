@@ -61,7 +61,9 @@ class MainWindow(QMainWindow):
         m1.addAction('Open video as reference').triggered.connect(
             self.open_video_reference)
         self.references['viewMenu'] = self.menuBar().addMenu('View')
+
         m1 = self.menuBar().addMenu('Filter')
+        m1.triggered.connect(self.updateViewMenu)
         m1.addAction('Clear').triggered.connect(self.clear_filter)
         m2 = m1.addMenu('Blur')
         a = m2.addAction('Gaussian')
@@ -143,9 +145,9 @@ class MainWindow(QMainWindow):
                 self.update_image()
             else:
                 def fn(img):
-                    self.buffers['background_mask'] = {
-                        'data': bck.get_mask(img),
-                        'format': QImage.Format_Mono}
+                    self.buffers['background_reference'] = {
+                        'data': img,
+                        'format': QImage.Format_RGB888}
                     return bck.background_removal(img)
                 self.videoThread.push_processing_step(fn)
         else:
