@@ -47,7 +47,6 @@ class MainWindow(QMainWindow):
         if action == clearSeeds:
             self.mapSeeds.clear()
 
-
     def createCentralWidget(self):
         self.setCentralWidget(QLabel())
         self.centralWidget().mousePressEvent = self.getPos
@@ -143,7 +142,12 @@ class MainWindow(QMainWindow):
                 self.image = bck.background_removal(self.image)
                 self.update_image()
             else:
-                self.videoThread.push_processing_step(bck.background_removal)
+                def fn(img):
+                    self.buffers['background_mask'] = {
+                        'data': bck.get_mask(img),
+                        'format': QImage.Format_Mono}
+                    return bck.background_removal(img)
+                self.videoThread.push_processing_step(fn)
         else:
             msg = QMessageBox()
             msg.setIcon(QMessageBox.Critical)
@@ -216,6 +220,10 @@ class MainWindow(QMainWindow):
         fn, format = QFileDialog.getOpenFileName(
             self, 'Open Video', '.', 'Videos (*.avi *.mkv *.mp4)')
         x, self.background = cv.VideoCapture(fn).read()
+        self.buffers['background'] = {
+            'data': self.background,
+            'format': QImage.Format_RGB888}
+        self.updateViewMenu()
 
     def unsharp_masking(self):
         if self.videoThread is None:
@@ -251,12 +259,23 @@ class MainWindow(QMainWindow):
         self.centralWidget().setPixmap(QPixmap.fromImage(im))
 
     def regionGrowing(self):
-        rg = RegionGrowing(
-            self.buffers['src']['data'],
-            np.ones(self.buffers['src']['data'].shape[:2]),
-            self.mapSeeds)
-        rg.saturate()
-        print(rg.result())
+        if self.background is not None:
+            bck = BackgroundRemoval(self.background)
+            rg = RegionGrowing(
+                self.buffers['src']['data'],
+                np.ones(self.buffers['src']['data'].shape[:2]),
+                self.mapSeeds)
+            rg.saturate()
+            if self.videoThread is None:
+                self.image = bck.background_removal(self.image)
+                self.update_image()
+            else:
+                self.videoThread.push_processing_step(bck.background_removal)
+        else:
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Critical)
+            msg.setText("Must select a background as reference")
+            msg.exec_()
         
         # self.buffers['boundaries'] = {
         #     'data': np.zeros((w, h), np.uint8),
