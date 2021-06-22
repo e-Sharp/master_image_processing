@@ -32,8 +32,8 @@ class MainWindow(QMainWindow):
 
     def contextMenuEvent(self, event):
         contextMenu = QMenu(self)
-        pause = contextMenu.addAction("pause")
-        restart = contextMenu.addAction("restart")
+        pause = contextMenu.addAction("Pause")
+        restart = contextMenu.addAction("Restart")
         stopPlacing = contextMenu.addAction("Stop Placing")
         clearSeeds = contextMenu.addAction("Clear Seeds")
         action = contextMenu.exec_(self.mapToGlobal(event.pos()))
