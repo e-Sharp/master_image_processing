@@ -201,6 +201,12 @@ class MainWindow(QMainWindow):
             self.videoThread = VideoThread(fn)
             self.videoThread.change_pixmap_signal.connect(self.update_video)
             self.videoThread.start()
+            # Also set it as reference.
+            x, self.background = cv.VideoCapture(fn).read()
+            self.buffers['background'] = {
+                'data': self.background,
+                'format': QImage.Format_RGB888}
+            self.updateViewMenu()
 
     def open_image(self):
         fn, format = QFileDialog.getOpenFileName(
@@ -263,31 +269,29 @@ class MainWindow(QMainWindow):
     def regionGrowing(self):
         if self.background is not None:
             bck = BackgroundRemoval(self.background)
+            mask = bck.get_mask(self.buffers['src']['data'])
+            
+            self.buffers['mask'] = {
+                'data': mask,
+                'format': QImage.Format_Grayscale8}
+
             rg = RegionGrowing(
                 self.buffers['src']['data'],
-                np.ones(self.buffers['src']['data'].shape[:2]),
+                self.buffers['mask']['data'],
                 self.mapSeeds)
             rg.saturate()
-            if self.videoThread is None:
-                self.image = bck.background_removal(self.image)
-                self.update_image()
-            else:
-                self.videoThread.push_processing_step(bck.background_removal)
+    
+            self.buffers['regions'] = {
+                'data': cv.applyColorMap(rg.regions, cv.COLORMAP_JET),
+                'format': QImage.Format_RGB888}
+
+            self.updateViewMenu()
         else:
             msg = QMessageBox()
             msg.setIcon(QMessageBox.Critical)
             msg.setText("Must select a background as reference")
             msg.exec_()
         
-        # self.buffers['boundaries'] = {
-        #     'data': np.zeros((w, h), np.uint8),
-        #     'format': QImage.Format_Mono}
-        # self.buffers['regions'] = {
-        #     'data': np.zeros((w, h), np.uint8),
-        #     'format': QImage.Format_Mono}
-        # self.buffers['visited'] = {
-        #     'data': np.zeros((w, h), np.bool_),
-        #     'format': QImage.Format_Mono}
-        # self.updateViewMenu()
+        
         
             
